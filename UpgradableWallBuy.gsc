@@ -252,7 +252,7 @@ function WallUpgradeThink()
 	//hintStr = "Press F for " + str_localized + " [Cost : " + cost + "]";
 	//linkedWallBuy SetHintString(hintStr);
 
-	//}
+	//}//test
 	
 	
 	level notify("weaponSpawned");
