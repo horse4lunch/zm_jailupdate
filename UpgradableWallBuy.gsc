@@ -191,7 +191,7 @@ function Awake()
 
 function Main()
 {
-	zm_weapons::load_weapon_spec_from_table("gamedata\weapons\zm\zm_levelcommon_weapons.csv", 1);
+	
 }
 
 function CustomWallBuyThink()
