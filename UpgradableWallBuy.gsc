@@ -72,15 +72,30 @@
 #precache("fx", FX_RED);
 #precache("fx", FX_ORANGE);
 #precache("fx", FX_PURPLE);
-//#precache("fx", "custom/wallButFxGreen");
+
+//string cache
+#precache("triggerstring","[{+activate}] To Upgrade to ^2(Uncommon)^0 [Costs: &&1]");
+#precache("triggerstring","[{+activate}] To Upgrade to ^6(Rare)^0 [Costs: &&1]");
+#precache("triggerstring","[{+activate}] To Upgrade to ^3(Epic)^0 [Costs: &&1]");
+#precache("triggerstring","[{+activate}] To Upgrade to ^1(Legendary)^0 [Costs: &&1]");
+
+#define BUY_WEAPON_HINT "Press [{+activate}] for &&1 [Cost : &&2 ]"
+#precache("triggerstring", BUY_WEAPON_HINT);
+
+#define BUY_AMMO_HINT "Ammo cost: &&1"
+#precache("triggerstring", BUY_AMMO_HINT);
+
+#define MAX_RARITY_HINT "^1 Max Rarity"
+#precache("triggerstring", MAX_RARITY_HINT);
+
+
+
 
 #namespace UpgradableWallBuy;
 
 REGISTER_SYSTEM( "UpgradableWallBuy", &Awake, undefined)
 function Awake()
 {
-	//SetDvar("developer", 2);
-  	//SetDvar("logfile", 2);
 
 	level.costArray = [];
 	level.costArray[0] = 1000;
@@ -88,8 +103,6 @@ function Awake()
 	level.costArray[2] = 3000;
 	level.costArray[3] = 10000;
 
-
-	
 	level.fxArray = [];
 	level.fxArray[0] = FX_BLUE;
 	level.fxArray[1] = FX_GREEN;
@@ -104,15 +117,12 @@ function Awake()
 	level.modelArray[3] = "_mc_block_beacon_orange";
 	level.modelArray[4] = "_mc_block_beacon_red";
 	
+	level.rarityHintArray = [];
+	level.rarityHintArray[0] = "[{+activate}] To Upgrade to ^2(Uncommon)^0 [Costs: &&1]";
+	level.rarityHintArray[1] = "[{+activate}] To Upgrade to ^6(Rare)^0 [Costs: &&1]";
+	level.rarityHintArray[2] = "[{+activate}] To Upgrade to ^3(Epic)^0 [Costs: &&1]";
+	level.rarityHintArray[3] = "[{+activate}] To Upgrade to ^1(Legendary)^0 [Costs: &&1]";
 
-	
-	level.rarityHints = [];
-	level.rarityHints[0] = "[{+activate}] To Upgrade to ^2(Uncommon)^0 [Costs: &&1]";
-	level.rarityHints[1] = "[{+activate}] To Upgrade to ^6(Rare)^0 [Costs: &&1]";
-	level.rarityHints[2] = "[{+activate}] To Upgrade to ^3(Epic)^0 [Costs: &&1]";
-	level.rarityHints[3] = "[{+activate}] To Upgrade to ^1(Legendary)^0 [Costs: &&1]";
-
-	
 	level.common = [];
 	level.common[0] = "pistol_standard";
 	level.common[1] = "pistol_fullauto";
@@ -157,33 +167,22 @@ function Awake()
 	level.legendary[1] = "raygun_mark3";
 	level.legendary[2] = "thundergun";
 	level.legendary[3] = "tesla_gun";
-
-	level.legendary[4] = "shotgun_fullauto";
-	level.legendary[5] = "shotgun_precision";
-	level.legendary[6] = "shotgun_semiauto";
-	level.legendary[7] = "launcher_standard";
-	level.legendary[8] = "zod_riotshield";
-	level.legendary[9] = "hero_gravityspikes_melee";
-	level.legendary[10] = "ar_famas";
-	level.legendary[11] = "special_crossbow_dw";
 	
-	level.rarities = [];
-	level.rarities[0] = level.common;
-	level.rarities[1] = level.uncommon;
-	level.rarities[2] = level.rare;
-	level.rarities[3] = level.epic;
-	level.rarities[4] = level.legendary;
+	level.rarityArray = [];
+	level.rarityArray[0] = level.common;
+	level.rarityArray[1] = level.uncommon;
+	level.rarityArray[2] = level.rare;
+	level.rarityArray[3] = level.epic;
+	level.rarityArray[4] = level.legendary;
 
-	level.currentRaritySpawn1 = 0;
-	level.weaponIndex = 0;
 	customWallBuyEnts = GetEntArray("customWallBuyEnt", "script_parameters");
 	wallUpgradeEnts = GetEntArray("wallUpgradeEnt", "script_parameters");
-	array::thread_all(customWallBuyEnts, &CustomWallBuyThink);
-	array::thread_all(wallUpgradeEnts, &WallUpgradeThink);
-	foreach(player in GetPlayers())
-	{
-		player.score += 10000;
-	}
+
+	level.relativeBeaconPos = (0,0,-65);
+	level.relativeFxPos = (0,0,-35);
+
+	array::thread_all(customWallBuyEnts, &CustomWallBuyInit);
+	array::thread_all(wallUpgradeEnts, &WallUpgradeInit);
 	
 	Main();
 
@@ -194,44 +193,49 @@ function Main()
 	
 }
 
-function CustomWallBuyThink()
+function CustomWallBuyInit()
 {
-	level waittill("weaponSpawned"); //waiting until WallUpgradeThink() has spawned our weapon the first time
 	linkedUpgrader = GetEnt(self.target,"targetname");
-	linkedWeaponName = linkedUpgrader.script_noteworthy;
-	temp = GetWeapon(linkedWeaponName);
-	cost = zm_weapons::get_weapon_cost(temp);
-	ammoCost = zm_weapons::get_ammo_cost(temp);
-	str_localized = MakeLocalizedString(temp.displayname);
-	hintStr = "Press F for " + str_localized + " [Cost : " + cost + "]";
-	self SetHintString(hintStr);
+	linkedUpgrader waittill("weaponSpawned"); //waiting until WallUpgradeThink() has chosen our weapon the first time
+
+	linkedWeaponName = linkedUpgrader.script_noteworthy; //Spawning our intial weapon
+	tempWeapon = GetWeapon(linkedWeaponName);
+	cost = zm_weapons::get_weapon_cost(tempWeapon);
+	
+	tempLocalizedWeaponName = MakeLocalizedString(tempWeapon.displayname);	//setting intial hint string
+	self SetHintString(BUY_WEAPON_HINT, tempLocalizedWeaponName, cost );
+	self SetCursorHint("HINT_NOICON");
+	
 	thread CustomWallBuy();
-	for(;;)
+	
+	for(;;) //checking if the player already has the current wall weapon if so change the hint string to reflect that
 	{
 
 		if(IsDefined(GetPlayerTouchingTrigger(self)))
 		{
 			player = GetPlayerTouchingTrigger(self);
-			linkedUpgrader = GetEnt(self.target,"targetname");
 			linkedWeaponName = linkedUpgrader.script_noteworthy;
 			newWeapon = GetWeapon(linkedWeaponName);
 			playerHasWeapon = player zm_weapons::has_weapon_or_upgrade(newWeapon);
 			ammoCost = zm_weapons::get_ammo_cost(newWeapon);
 			if(playerHasWeapon)
 			{
-				self SetHintString("Ammo [cost: &&1 ]",ammoCost);
+				self SetHintString(BUY_AMMO_HINT, ammocost);
+				
 			}
 		}
 		wait 0.1;
 	}
+	
 }
 
 function CustomWallBuy()
 {
+	linkedUpgrader = GetEnt(self.target,"targetname");
+
 	for(;;)
 	{
 		self waittill("trigger", player);
-		linkedUpgrader = GetEnt(self.target,"targetname");
 		linkedWeaponName = linkedUpgrader.script_noteworthy;
 		newWeapon = GetWeapon(linkedWeaponName);
 
@@ -240,16 +244,14 @@ function CustomWallBuy()
 		ammoCost = zm_weapons::get_ammo_cost(newWeapon);
 		playerHasWeapon = player zm_weapons::has_weapon_or_upgrade(newWeapon);
 
-		if (playerHasWeapon && player zm_score::can_player_purchase(ammoCost))
+		if (playerHasWeapon && player zm_score::can_player_purchase(ammoCost)) //If player has the current weapon get ammo instead
 		{
-			IPrintLnBold("Bought ammo");
 			player zm_weapons::ammo_give(newWeapon);
 			player.score -= ammoCost;
 			player playsound("zmb_cha_ching");
 		}
-		else if(player zm_score::can_player_purchase(cost))
+		else if(player zm_score::can_player_purchase(cost)) //purchase new weapon
 		{
-			IPrintLnBold("Bought gun ",newWeapon.name );
 			player.score -= cost;
 			player zm_weapons::weapon_give(newWeapon, false, false, false, true);
 			player playsound("zmb_cha_ching");
@@ -258,204 +260,109 @@ function CustomWallBuy()
 	}
 }
 
-function WallUpgradeThink()
+function WallUpgradeInit()
 {
 	
-	wallModel = undefined;
-	fxEnt = undefined;
-	beaconModel = undefined;
 	linkedWallBuy = GetEnt(self.target, "targetname");
-	spawnStructName = self.script_string;
+	spawnPointNameStr = self.script_string;
 	rarity = linkedWallBuy.script_int;
 	
-	self SetHintString(level.rarityHints[rarity], level.costArray[rarity]);
+	self SetHintString(level.rarityHintArray[rarity], level.costArray[rarity]);
 	self SetCursorHint("HINT_NOICON");
 
-	linkedSpawnPoint = GetEnt(spawnStructName, "targetname");
-	beaconSpawnPoint.origin = linkedSpawnPoint.origin;
-	fxSpawnPoint.origin = linkedSpawnPoint.origin;
-	
+	linkedSpawnPoint = GetEnt(spawnPointNameStr, "targetname");
 
-
-	weaponIndex = RandomInt(level.rarities[rarity].size);
-	newWeapon = GetWeapon(level.rarities[rarity][weaponIndex]);
+	weaponIndex = RandomInt(level.rarityArray[rarity].size);
+	newWeapon = GetWeapon(level.rarityArray[rarity][weaponIndex]);
 	self.script_noteworthy = newWeapon.name;
 	if(IsDefined(linkedSpawnPoint))
 	{
-		
-
-
+		beaconModel = util::spawn_model(level.modelArray[rarity], linkedSpawnPoint.origin + level.relativeBeaconPos, linkedSpawnPoint.angles);
 
 		wallModel = zm_utility::spawn_weapon_model( newWeapon, undefined, linkedSpawnPoint.origin, linkedSpawnPoint.angles, undefined ); 
-		fxEnt = Spawn( "script_model", linkedSpawnPoint.origin );
+		fxEnt = Spawn( "script_model", linkedSpawnPoint.origin + level.relativeFxPos);
 		fxEnt.angles = linkedSpawnPoint.angles;
 		fxEnt SetModel( "tag_origin" ); 
 		PlayFXOnTag(level.fxArray[rarity], fxEnt, "tag_origin" );
-		fxEnt MoveZ(-70, 0);
-		beaconModel = util::spawn_model(level.modelArray[rarity], linkedSpawnPoint.origin + (0,0,-65), beaconSpawnPoint.angles);
-		//beaconModel MoveZ(-70, 0);
 	}
 
-	
-	
-
-	cost = zm_weapons::get_weapon_cost(newWeapon);
-	ammoCost = zm_weapons::get_ammo_cost(newWeapon);
-	str_localized = MakeLocalizedString(newWeapon.displayname);
-
-	
-	
-	level notify("weaponSpawned");
-	for(;;)
-	{
-		//get our ents/structs
-		self waittill("trigger",player);
-		linkedWallBuy = GetEnt(self.target, "targetname");
-		spawnStructName = self.script_string;
-		linkedSpawnPoint = GetEnt(spawnStructName, "targetname");
-		upgradeCost = level.costArray[rarity];
-		
-		
-		
-		if (linkedWallBuy.script_int < level.rarities.size - 1 && player zm_score::can_player_purchase(upgradeCost)) //if rarity of the linked wall buy can be upgraded try
-		{
-
-			player.score -= upgradeCost;
-			linkedWallBuy.script_int++;       
-			rarity = linkedWallBuy.script_int;
-			
-			if(IsDefined(wallModel))
-			{
-				wallModel Delete();
-				wallModel = undefined;
-			}
-
-			if(IsDefined(fxEnt))
-			{
-				fxEnt Delete();
-				fxEnt = undefined;
-			}
-			
-			if(IsDefined(beaconModel))
-			{
-				beaconModel Delete();
-				beaconModel = undefined;
-			}
-
-			if(IsDefined(linkedSpawnPoint))
-			{
-				beaconModel = util::spawn_model(level.modelArray[rarity], linkedSpawnPoint.origin + (0,0,-65), linkedSpawnPoint.angles);
-				linkedSpawnPoint MoveZ(-20, 0.01);
-				wait 0.1;
-				
-				fxEnt = Spawn( "script_model", linkedSpawnPoint.origin );
-				fxEnt.angles = linkedSpawnPoint.angles;
-				fxEnt SetModel( "tag_origin" ); 
-				PlayFXOnTag(level.fxArray[rarity], fxEnt, "tag_origin" );
-				fxEnt MoveZ(-50, 0);
-				self SetHintString(level.rarityHints[rarity], level.costArray[rarity]);
-				if (rarity == level.rarityHints.size)
-				{
-					self SetHintString("^1 Max Rarity");
-				}
-				//beaconModel MoveZ(-50, 0);
-				
-				wait 0.1;
-				linkedSpawnPoint MoveZ(20, 2.25);
-			
-				for (i = 0; i < 15; i++) //slot machine animation 
-				{
-					
-					//PlaySoundAtPosition("mc_bell", linkedSpawnPoint.origin);
-					randomIndex = RandomInt(level.rarities[rarity].size);
-					rollWeapon = GetWeapon(level.rarities[rarity][randomIndex]);
-					tempWeaponModel = zm_utility::spawn_weapon_model( rollWeapon, undefined, linkedSpawnPoint.origin, linkedSpawnPoint.angles, undefined ); 
-					wait 0.15;
-					tempWeaponModel Delete();
-				}
-				//PlaySoundAtPosition("mc_bit", linkedSpawnPoint.origin);
-				//actually choose our weapon and spawn it
-				weaponIndex = RandomInt(level.rarities[rarity].size);
-				newWeapon = GetWeapon(level.rarities[rarity][weaponIndex]);
-				self.script_noteworthy = newWeapon.name;
-				wallModel = zm_utility::spawn_weapon_model( newWeapon, undefined, linkedSpawnPoint.origin, linkedSpawnPoint.angles, undefined ); 
-
-			}
-			cost = zm_weapons::get_weapon_cost(newWeapon);
-			ammoCost = zm_weapons::get_ammo_cost(newWeapon);
-			str_localized = MakeLocalizedString(newWeapon.displayname);
-			hintStr = "Press F for " + str_localized + " [Cost : " + cost + "]";
-			//hintStr = zm_utility::get_hint_string(LinkedWallBuy, str_localized, cost );
-			linkedWallBuy SetHintString(hintStr);
-
-		}
-		else
-		{
-			IPrintLnBold("Wallbuy already max rarity!");
-		}
-		
-
-	}
+	self notify("weaponSpawned");
+	WallUpgrade(wallModel, fxEnt, beaconModel);
 
 	
 }
 
-/*function WallUpgrade(ent,ent)
+function WallUpgrade(wallModel, fxEnt, beaconModel)
 {
-//todo
 	linkedWallBuy = GetEnt(self.target, "targetname");
-	spawnStructName = self.script_string;
-	//linkedSpawnPoint = struct::get(spawnStructName);
-	linkedSpawnPoint = GetEnt(spawnStructName, "targetname");
+	linkedSpawnPoint = GetEnt(self.script_string, "targetname");
 
-	
-	
-	if (linkedWallBuy.script_int < level.rarities.size - 1) //if rarity of the linked wall buy can be upgraded try
+	for(;;)
 	{
-
-		
-		linkedWallBuy.script_int++;       
+		self waittill("trigger",player);
 		rarity = linkedWallBuy.script_int;
+		upgradeCost = level.costArray[rarity];
 		
-		if(IsDefined(wallModel))
+		
+		
+		if (linkedWallBuy.script_int < level.rarityArray.size - 1 && player zm_score::can_player_purchase(upgradeCost)) //if rarity of the linked wall buy can be upgraded try
 		{
-			wallModel Delete();
-			wallModel = undefined;
-		}
-		if(IsDefined(linkedSpawnPoint))
-		{
-			linkedSpawnPoint MoveZ(-20, 0.01);
-			wait 0.1;
-			linkedSpawnPoint MoveZ(20, 2.25);
-		
-			for (i = 0; i < 15; i++) //slot machine animation 
-			{
-				randomIndex = RandomInt(level.rarities[rarity].size);
-				rollWeapon = GetWeapon(level.rarities[rarity][randomIndex]);
-				tempWeaponModel = zm_utility::spawn_weapon_model( rollWeapon, undefined, linkedSpawnPoint.origin, linkedSpawnPoint.angles, undefined ); 
-				wait 0.15;
-				tempWeaponModel Delete();
-			}
-		
-			//actually choose our weapon and spawn it
-			weaponIndex = RandomInt(level.rarities[rarity].size);
-			newWeapon = GetWeapon(level.rarities[rarity][weaponIndex]);
-			self.script_noteworthy = newWeapon.name;
-			wallModel = zm_utility::spawn_weapon_model( newWeapon, undefined, linkedSpawnPoint.origin, linkedSpawnPoint.angles, undefined ); 
-		}
-		cost = zm_weapons::get_weapon_cost(newWeapon);
-		ammoCost = zm_weapons::get_ammo_cost(newWeapon);
-		str_localized = MakeLocalizedString(newWeapon.displayname);
-		hintStr = "Press F for " + str_localized + " [Cost : " + cost + "]";
-		//hintStr = zm_utility::get_hint_string(LinkedWallBuy, str_localized, cost );
-		linkedWallBuy SetHintString(hintStr);
 
+			player.score -= upgradeCost;
+			player playsound("zmb_cha_ching");
+			linkedWallBuy.script_int++;       
+			rarity = linkedWallBuy.script_int;
+			
+			wallModel = SafeDelete(wallModel); //check if old models and fx already exist if so delete them and set to undefined
+			fxEnt = SafeDelete(fxEnt);
+			beaconModel = SafeDelete(beaconModel);
+
+			if(IsDefined(linkedSpawnPoint))
+			{
+				beaconModel = util::spawn_model(level.modelArray[rarity], linkedSpawnPoint.origin + level.relativeBeaconPos, linkedSpawnPoint.angles); //change box model
+				
+				fxEnt = Spawn( "script_model", linkedSpawnPoint.origin + level.relativeFxPos); //change fx model
+				fxEnt.angles = linkedSpawnPoint.angles;
+				fxEnt SetModel( "tag_origin" ); 
+				PlayFXOnTag(level.fxArray[rarity], fxEnt, "tag_origin" );
+
+				linkedSpawnPoint MoveZ(-20, 0.01);	
+				wait 0.1;
+				
+				linkedSpawnPoint MoveZ(20, 2.25);
+				for (i = 0; i < 15; i++) //slot machine animation 
+				{
+					randomIndex = RandomInt(level.rarityArray[rarity].size);
+					rollWeapon = GetWeapon(level.rarityArray[rarity][randomIndex]);
+					tempWeaponModel = zm_utility::spawn_weapon_model( rollWeapon, undefined, linkedSpawnPoint.origin, linkedSpawnPoint.angles, undefined ); 
+					wait 0.15;
+					tempWeaponModel Delete();
+				}
+				//actually choose our weapon and spawn it
+				weaponIndex = RandomInt(level.rarityArray[rarity].size);
+				newWeapon = GetWeapon(level.rarityArray[rarity][weaponIndex]);
+				self.script_noteworthy = newWeapon.name;
+				wallModel = zm_utility::spawn_weapon_model( newWeapon, undefined, linkedSpawnPoint.origin, linkedSpawnPoint.angles, undefined ); 
+
+			}
+
+			cost = zm_weapons::get_weapon_cost(newWeapon);
+			localizedWeaponName = MakeLocalizedString(newWeapon.displayname);
+			linkedWallBuy SetHintString(BUY_WEAPON_HINT, localizedWeaponName, cost); //Set linked hint string
+			linkedWallBuy SetCursorHint("HINT_NOICON");
+			
+			self SetHintString(level.rarityHintArray[rarity], level.costArray[rarity]);	//Set upgrade lever Hint string
+			if (rarity == level.rarityHintArray.size)	
+			{
+				self SetHintString(MAX_RARITY_HINT);
+			}
+		}
+		else 
+		{
+			//todo maybe play a sound if player cant afford to upgrade
+		}
 	}
-	else
-	{
-		IPrintLnBold("Wallbuy already max rarity!");
-	}
-}*/
+}
 
 function GetPlayerTouchingTrigger(trigger)
 {
@@ -468,6 +375,16 @@ function GetPlayerTouchingTrigger(trigger)
       
   }
   return undefined;
+}
+
+function SafeDelete(ref)
+{
+	if (IsDefined(ref))
+    {
+        ref Delete();
+        ref = undefined;
+    }
+    return ref;
 }
 
 
