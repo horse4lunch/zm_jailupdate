@@ -96,6 +96,12 @@
 REGISTER_SYSTEM( "UpgradableWallBuy", &Awake, undefined)
 function Awake()
 {
+	clientfield::register( "world", "playAnim", VERSION_SHIP, 5, "int" );
+	clientfield::register( "world", "playAnimVar", VERSION_SHIP, 5, "int" );
+
+	level.spawnArray = [];
+	level.spawnArray[0] = "spawnLoc0";
+	level.spawnArray[1] = "spawnLoc1";
 
 	level.costArray = [];
 	level.costArray[0] = 1000;
@@ -183,7 +189,6 @@ function Awake()
 
 	array::thread_all(customWallBuyEnts, &CustomWallBuyInit);
 	array::thread_all(wallUpgradeEnts, &WallUpgradeInit);
-	
 	Main();
 
 }
@@ -296,6 +301,16 @@ function WallUpgrade(wallModel, fxEnt, beaconModel)
 {
 	linkedWallBuy = GetEnt(self.target, "targetname");
 	linkedSpawnPoint = GetEnt(self.script_string, "targetname");
+	
+
+	for (i = 0; i < level.spawnArray.size; i++)
+	{
+		if (self.script_string == level.spawnArray[i])
+		{
+			linkedSpawnPointIndex = i;
+			break;
+		}
+	}
 
 	for(;;)
 	{
@@ -326,18 +341,22 @@ function WallUpgrade(wallModel, fxEnt, beaconModel)
 				fxEnt SetModel( "tag_origin" ); 
 				PlayFXOnTag(level.fxArray[rarity], fxEnt, "tag_origin" );
 
-				linkedSpawnPoint MoveZ(-20, 0.01);	
-				wait 0.1;
+				//linkedSpawnPoint MoveZ(-20, 0.01);	
+				//wait 0.1;
 				
-				linkedSpawnPoint MoveZ(20, 2.25);
-				for (i = 0; i < 15; i++) //slot machine animation 
+				//linkedSpawnPoint MoveZ(20, 2.25);
+				
+				level clientfield::set( "playAnim", rarity);
+				level clientfield::set( "playAnimVar", linkedSpawnPointIndex);
+				waitrealtime (2.25);
+				/*for (i = 0; i < 15; i++) //slot machine animation 
 				{
 					randomIndex = RandomInt(level.rarityArray[rarity].size);
 					rollWeapon = GetWeapon(level.rarityArray[rarity][randomIndex]);
 					tempWeaponModel = zm_utility::spawn_weapon_model( rollWeapon, undefined, linkedSpawnPoint.origin, linkedSpawnPoint.angles, undefined ); 
 					wait 0.15;
 					tempWeaponModel Delete();
-				}
+				}*/
 				//actually choose our weapon and spawn it
 				weaponIndex = RandomInt(level.rarityArray[rarity].size);
 				newWeapon = GetWeapon(level.rarityArray[rarity][weaponIndex]);
@@ -359,6 +378,7 @@ function WallUpgrade(wallModel, fxEnt, beaconModel)
 		}
 		else 
 		{
+			player.score += 100000;
 			//todo maybe play a sound if player cant afford to upgrade
 		}
 	}
@@ -386,5 +406,3 @@ function SafeDelete(ref)
     }
     return ref;
 }
-
-

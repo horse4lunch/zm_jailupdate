@@ -146,14 +146,14 @@ function CustomWallBuy()
 			IPrintLnBold("Bought ammo");
 			player zm_weapons::ammo_give(newWeapon);
 			player.score -= ammoCost;
-			player playsound("zmb_cha_ching");
+			//player playsound("zmb_cha_ching");
 		}
 		else if(player zm_score::can_player_purchase(cost))
 		{
 			IPrintLnBold("Bought gun");
 			player.score -= cost;
 			player zm_weapons::weapon_give(newWeapon, false, false, false, true);
-			player playsound("zmb_cha_ching");
+			//player playsound("zmb_cha_ching");
 		}
 		
 	}
