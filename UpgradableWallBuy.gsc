@@ -102,7 +102,7 @@ function Awake()
 	level.spawnArray = [];
 	level.spawnArray[0] = "spawnLoc0";
 	level.spawnArray[1] = "spawnLoc1";
-
+	
 	level.costArray = [];
 	level.costArray[0] = 1000;
 	level.costArray[1] = 2000;
@@ -308,7 +308,7 @@ function WallUpgrade(wallModel, fxEnt, beaconModel)
 		if (self.script_string == level.spawnArray[i])
 		{
 			linkedSpawnPointIndex = i;
-			break;
+			break; //todo why tf is this here?
 		}
 	}
 
