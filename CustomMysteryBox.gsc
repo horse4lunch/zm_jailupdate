@@ -69,9 +69,6 @@ function Awake()
     level.relativeCloseFxPos = (0,0,-11);
     thread SpawnFireSale();
     level.MagicBoxIndex = 0;
-    
-   
-    
 }
 
 function MysteryBox()
@@ -106,16 +103,18 @@ function MysteryBox()
             waitrealtime(1);
             continue;
         }
-        else if(!self.hasBoxEntered) //init first box
+        if(!self.hasBoxEntered) //init box
         {
             magicboxModel AnimScripted( "enterFin", magicboxModel.origin , magicboxModel.angles, MAGIC_BOX_ENTER);
             magicboxModel waittill("enterFin");
 
+
             closeFxEnt = HorseUtil::SpawnFxHelper(level.relativeCloseFxPos,linkedSpawnPoint,CLOSE_GLOW_FX); //do fx
+            waitrealtime(5); //testing fx shit maybe remove
 
             self.hasBoxEntered = true;
         }
-        self.maxBoxHits = 2; //todo randomize max box hits
+        self.maxBoxHits = 3; //todo randomize max box hits
         self SetHintString(BUY_MYSTERY_WEAPON_HINT);
         self SetCursorHint("HINT_NOICON");
         
@@ -167,7 +166,6 @@ function MysteryBox()
             self.boxHitCount++;
 
             player playsound("zmb_cha_ching");
-            //linkedSpawnPoint MoveZ(40,3.5);
             modelSpawnPoint = Spawn("script_model", linkedSpawnPoint.origin);
             modelSpawnPoint.angles = linkedSpawnPoint.angles;
             modelSpawnPoint MoveZ(40,3.5);
@@ -177,13 +175,13 @@ function MysteryBox()
 		    zm_utility::play_sound_at_pos( "music_chest", self.origin );
 
             openFxEnt = HorseUtil::SpawnFxHelper(level.relativeOpenFxPos,linkedSpawnPoint,OPEN_GLOW_FX); //do fx
+            newWeapon = thread GetNewRandomBoxWeapon(player); //getting the random weapon to actually give the player, doing it early to avoid
             level clientfield::set( "playMagicBoxAnim", 1);
             level clientfield::set( "playMagicBoxAnimVar", self.spawnPointIndex);
             
-            for (i = 0; i < 36; i++) //slot machine animation todo client
+            
+            for (i = 0; i < 36; i++) //slot machine animation wait
             { 
-                //rollWeapon = GetNewRandomBoxWeapon(player);
-                //modelSpawnPoint SetModel(rollWeapon.worldmodel);
                 if( i < 20 )
                 {
                     WAIT_SERVER_FRAME; 
@@ -225,9 +223,7 @@ function MysteryBox()
             }
 
             //modelSpawnPoint MoveZ(-40,0.01);//actually choose weapon
-            newWeapon = GetNewRandomBoxWeapon(player);
-            //newWeaponModel = zm_utility::spawn_weapon_model( newWeapon, undefined, linkedSpawnPoint.origin, linkedSpawnPoint.angles, undefined );
-            modelSpawnPoint SetModel(newWeapon.worldmodel); 
+            modelSpawnPoint useweaponmodel(newWeapon); 
             localizedWeaponName = MakeLocalizedString(newWeapon.displayname);
             self SetHintString(GRAB_MYSTERY_WEAPON_HINT, localizedWeaponName);
             self SetCursorHint("HINT_NOICON");
@@ -241,6 +237,7 @@ function MysteryBox()
             magicboxModel AnimScripted( "closeFin", magicboxModel.origin , magicboxModel.angles, MAGIC_BOX_CLOSE);
             
             closeFxEnt = HorseUtil::SpawnFxHelper(level.relativeCloseFxPos,linkedSpawnPoint,CLOSE_GLOW_FX); //do fx
+            waitrealtime(1);
 
         }
 
@@ -334,35 +331,10 @@ function GetBoxWeaponArray() //helper func to get the zombie weapon array
     }
     return weaponArray;
 }
-/*
-function SpawnFxHelper(relativePos,spawnPoint,fx) //helper func for spawning fx
-{
-    if (!isdefined(relativePos))
-    {
-        relativePos = (0, 0, 0);
-    }
-        
-    fxEnt = Spawn( "script_model", spawnPoint.origin + relativePos); 
-    fxEnt.angles = spawnPoint.angles;
-	fxEnt SetModel( "tag_origin" ); 
-    PlayFXOnTag(fx, fxEnt, "tag_origin" );
-
-    return fxEnt;
-}
-
-function SafeDelete(ref)
-{
-	if (IsDefined(ref))
-    {
-        ref Delete();
-        ref = undefined;
-    }
-    return ref;
-}
-*/
 
 function PrecacheAllWeaponModels() //maybe works idk I cba to figure out all the model names
 {
+    mysteryBox = GetEntArray("mysteryBox","targetname");
     for(;;)
     {
         if (!isdefined(level.zombie_weapons))
@@ -378,8 +350,13 @@ function PrecacheAllWeaponModels() //maybe works idk I cba to figure out all the
             if(zm_weapons::get_is_in_box(weapon))
             {
                 ent = Spawn("script_model", (0,0,20));
-                ent SetModel(weapon.worldmodel);
+                ent useweaponmodel(weapon);
                 HorseUtil::SafeDelete(ent);
+                localizedWeaponName = MakeLocalizedString(weapon.displayname); //remove
+                mysteryBox SetHintString(GRAB_MYSTERY_WEAPON_HINT, localizedWeaponName); //remove
+                mysteryBox SetCursorHint("HINT_NOICON"); //remove 
+                IPrintLnBold("Press F for " + localizedWeaponName); //remove
+                
             }
         }
         break;
