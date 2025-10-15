@@ -113,9 +113,6 @@ function IncludeZombieWeapon()
         if(isdefined(level.zombieWeapons[weapon].inBox) && level.zombieWeapons[weapon].inBox)
         {
             level.includedZombieWeapons[level.includedZombieWeapons.size] = weapon.name;
-            stinky = GetWeapon(weapon.name); //remove
-            localizedWeaponName = MakeLocalizedString(stinky.displayname); //remove
-            IPrintLnBold("Press F for " + localizedWeaponName); //remove
         }
     }
 }

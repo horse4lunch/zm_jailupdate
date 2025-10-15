@@ -15,8 +15,11 @@
 #using scripts\shared\scene_shared;
 #using scripts\shared\animation_shared;
 #using scripts\zm\_zm_bgb;
+#using scripts\zm\_zm_unitrigger;
 //My stuff
 #using scripts\McCore\HorseUtil;
+
+#precache( "triggerstring", "ZOMBIE_TRADE_WEAPON_FILL" );
 
 //fx cache
 #define OPEN_GLOW_FX "custom/fx_weapon_box_open_glow_custom"
@@ -49,7 +52,7 @@
 
 //string cache
 
-#define BUY_MYSTERY_WEAPON_HINT "Buy random weapon [Cost : 950]"
+#define BUY_MYSTERY_WEAPON_HINT "Buy random weapon [Cost : &&1]"
 #precache("triggerstring", BUY_MYSTERY_WEAPON_HINT);
 #define GRAB_MYSTERY_WEAPON_HINT "Press [{+activate}] for &&1"
 #precache("triggerstring", GRAB_MYSTERY_WEAPON_HINT);
@@ -110,8 +113,9 @@ function MysteryBox()
 
 
             closeFxEnt = HorseUtil::SpawnFxHelper(level.relativeCloseFxPos,linkedSpawnPoint,CLOSE_GLOW_FX); //do fx
-            waitrealtime(5); //testing fx shit maybe remove
-
+            waitrealtime(2); //testing fx shit maybe remove
+            thread SetUpUniTrigger();
+            thread zm_unitrigger::register_static_unitrigger(self.owner.unitrigger_stub, &magicbox_unitrigger_think);
             self.hasBoxEntered = true;
         }
         self.maxBoxHits = 3; //todo randomize max box hits
@@ -225,8 +229,13 @@ function MysteryBox()
             //modelSpawnPoint MoveZ(-40,0.01);//actually choose weapon
             modelSpawnPoint useweaponmodel(newWeapon); 
             localizedWeaponName = MakeLocalizedString(newWeapon.displayname);
-            self SetHintString(GRAB_MYSTERY_WEAPON_HINT, localizedWeaponName);
-            self SetCursorHint("HINT_NOICON");
+            //self SetHintString(GRAB_MYSTERY_WEAPON_HINT, localizedWeaponName);
+            //self SetCursorHint("HINT_NOICON");
+            if(isdefined(newWeapon))
+            {
+                boxtrigger_update_prompt( player , newWeapon );
+            }
+            self setCursorHint( "HINT_WEAPON", newWeapon ); 
 
             self thread GiveBoxWeapon(player,newWeapon);//wait for player to get weapon || timeout
             self thread WeaponLowerAnimation(modelSpawnPoint);
@@ -334,10 +343,17 @@ function GetBoxWeaponArray() //helper func to get the zombie weapon array
 
 function PrecacheAllWeaponModels() //maybe works idk I cba to figure out all the model names
 {
-    mysteryBox = GetEntArray("mysteryBox","targetname");
+    
     for(;;)
     {
         if (!isdefined(level.zombie_weapons))
+        {
+            wait(0.1);
+            continue;
+        }
+
+        mysteryBox = GetEnt("boxSpawnLoc0","linkname");
+        if (!isdefined(mysteryBox))
         {
             wait(0.1);
             continue;
@@ -352,10 +368,10 @@ function PrecacheAllWeaponModels() //maybe works idk I cba to figure out all the
                 ent = Spawn("script_model", (0,0,20));
                 ent useweaponmodel(weapon);
                 HorseUtil::SafeDelete(ent);
-                localizedWeaponName = MakeLocalizedString(weapon.displayname); //remove
-                mysteryBox SetHintString(GRAB_MYSTERY_WEAPON_HINT, localizedWeaponName); //remove
-                mysteryBox SetCursorHint("HINT_NOICON"); //remove 
-                IPrintLnBold("Press F for " + localizedWeaponName); //remove
+                //localizedWeaponName = MakeLocalizedString(weapon.displayname); //remove
+                //mysteryBox SetHintString(GRAB_MYSTERY_WEAPON_HINT, localizedWeaponName); //remove
+                //mysteryBox SetCursorHint("HINT_NOICON"); //remove 
+                //IPrintLnBold("Press F for " + localizedWeaponName); //remove
                 
             }
         }
@@ -400,3 +416,66 @@ function GetSpawnPointArray()
 }
 
 
+function SetUpUniTrigger()
+{
+    IPrintLnBold("setup unitrigger");
+	self.unitrigger_stub = spawnstruct();
+	self.unitrigger_stub.origin = self.origin + (anglestoright(self.angles) * -22.5);
+	self.unitrigger_stub.angles = self.angles;
+	self.unitrigger_stub.script_unitrigger_type = "unitrigger_box_use";
+	self.unitrigger_stub.script_width = 104;
+	self.unitrigger_stub.script_height = 50;
+	self.unitrigger_stub.script_length = 45;
+	self.unitrigger_stub.trigger_target = self;
+	zm_unitrigger::unitrigger_force_per_player_triggers(self.unitrigger_stub, true);
+	self.unitrigger_stub.prompt_and_visibility_func = &boxtrigger_update_prompt;
+	
+}
+/* region dont touch */
+//some wonky shit i pulled from _zm_magicbox.gsc that I dont really understand
+//but it sets the hint strings without lag and without precaching
+function boxtrigger_update_prompt( player , weapon )
+{
+    IPrintLnBold("boxtrigger update prompt");
+	can_use = self boxstub_update_prompt( player , weapon );
+	if(isdefined(self.hint_string))
+	{
+		if (IsDefined(self.hint_parm1))
+			self SetHintString( self.hint_string, self.hint_parm1 );
+		else
+			self SetHintString( self.hint_string );
+	}
+	return can_use;
+}
+
+function boxstub_update_prompt( player , weapon )
+{
+    if( isdefined( weapon ) ) {
+        self.hint_parm1 = undefined;
+        self.stub.trigger_target.grab_weapon = weapon;
+        self.stub.trigger_target.grab_weapon_hint = true;
+        cursor_hint_weapon = self.stub.trigger_target.grab_weapon;
+        self SetCursorHint( "HINT_WEAPON", cursor_hint_weapon ); 
+        if( IsFunctionPtr( level.magic_box_check_equipment )
+            && [[ level.magic_box_check_equipment ]]( cursor_hint_weapon ) ) {
+            self.hint_string = &"ZOMBIE_TRADE_EQUIP_FILL"; 
+        }
+        else {
+            self.hint_string = &"ZOMBIE_TRADE_WEAPON_FILL";
+        }
+        return true;
+    }
+    return false;
+}
+function magicbox_unitrigger_think()
+{
+	self endon("kill_trigger");
+
+	while ( 1 )
+	{
+		self waittill( "trigger", player );
+		self.stub.trigger_target notify("trigger", player);
+	}
+}
+
+/* endregion */
