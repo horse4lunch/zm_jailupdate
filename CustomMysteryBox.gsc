@@ -52,14 +52,18 @@
 
 //string cache
 
-#define BUY_MYSTERY_WEAPON_HINT "Buy random weapon [Cost : &&1]"
+#define BUY_MYSTERY_WEAPON_HINT "Buy random weapon [Cost : 950]"
 #precache("triggerstring", BUY_MYSTERY_WEAPON_HINT);
+#define FIRESALE_BUY_MYSTERY_WEAPON_HINT "Buy random weapon [Cost : 10]"
+#precache("triggerstring", FIRESALE_BUY_MYSTERY_WEAPON_HINT);
 #define GRAB_MYSTERY_WEAPON_HINT "Press [{+activate}] for &&1"
 #precache("triggerstring", GRAB_MYSTERY_WEAPON_HINT);
 #define BOX_NOT_ACTIVE_HINT "Box not Active"
 #precache("triggerstring", BOX_NOT_ACTIVE_HINT);
 #namespace CustomMysteryBox;
 
+
+//gobble gums respin cycle, unbearable
 REGISTER_SYSTEM("CustomMysteryBox", &Awake, undefined)
 function Awake()
 {
@@ -72,6 +76,7 @@ function Awake()
     level.relativeCloseFxPos = (0,0,-11);
     thread SpawnFireSale();
     level.MagicBoxIndex = 0;
+    
 }
 
 function MysteryBox()
@@ -159,7 +164,7 @@ function MysteryBox()
         
         if (player zm_score::can_player_purchase(cost)) //player bought box
         {
-            player.score -= cost;
+            player zm_score::minus_to_player_score(cost);
             self SetHintString("");
             self SetCursorHint("HINT_NOICON");
 
@@ -207,6 +212,32 @@ function MysteryBox()
             
             if(self.boxHitCount == self.maxBoxHits) //joker
             {
+                if(!TreasureChestFiresaleActive() && player bgb::is_enabled( "zm_bgb_unbearable" ))
+                {
+                    //I think this should remove it from the hud but it doesnt
+                    player notify("bgb_limit_monitor");
+                    player notify("bgb_activation_monitor");
+                    player clientfield::set_player_uimodel("bgb_display", 0);
+                    player clientfield::set_player_uimodel("bgb_activations_remaining", 0);
+
+                    //this uses the gobble gum but doesnt remove it from the hub
+                    player setactionslot(1, "");
+                    player notify("bgb_update", "none", player.bgb);
+                    player notify("bgb_update_take_" + player.bgb);
+	                player.bgb = "none";
+                    //player notify( "zm_bgb_unbearable_used" );
+                    
+                    
+                    self.boxHitCount = 0;
+                    HorseUtil::SafeDelete(openFxEnt);
+                    HorseUtil::SafeDelete(modelSpawnPoint);
+                    magicboxModel AnimScripted( "closeFin", magicboxModel.origin , magicboxModel.angles, MAGIC_BOX_CLOSE);
+                    
+                    magicboxModel waittill("closeFin");
+                    closeFxEnt = HorseUtil::SpawnFxHelper(level.relativeCloseFxPos,linkedSpawnPoint,CLOSE_GLOW_FX); //do fx
+                    waitrealtime(1);
+                    continue;
+                }
                 self.boxActive = false;
                 self.hasBoxEntered = false;
                 self.boxHitCount = 0;
@@ -244,7 +275,7 @@ function MysteryBox()
             HorseUtil::SafeDelete(openFxEnt);
             HorseUtil::SafeDelete(modelSpawnPoint);
             magicboxModel AnimScripted( "closeFin", magicboxModel.origin , magicboxModel.angles, MAGIC_BOX_CLOSE);
-            
+            magicboxModel waittill("closeFin");
             closeFxEnt = HorseUtil::SpawnFxHelper(level.relativeCloseFxPos,linkedSpawnPoint,CLOSE_GLOW_FX); //do fx
             waitrealtime(1);
 
@@ -254,7 +285,7 @@ function MysteryBox()
 
 
 }
-function SpawnChest()
+function SpawnChest()//todo
 {
 
 }
@@ -307,6 +338,12 @@ function GiveBoxWeapon(orginalPlayer,weapon) //give weapon to player
             !current_weapon.isheroweapon &&
             !current_weapon.isgadget )
         {
+            if( player bgb::is_enabled( "zm_bgb_crate_power" ) )
+            {
+                weapon = zm_weapons::get_upgrade_weapon( weapon );
+                player zm_weapons::weapon_give(weapon, false, false, false, true);
+			    player notify( "zm_bgb_crate_power_used" );
+            }
             player zm_weapons::weapon_give(weapon, false, false, false, true);
             self notify("weaponTaken"); 
             break;
@@ -318,9 +355,9 @@ function WeaponLowerAnimation(spawnPoint) //lower weapon back into box
 {
     //todo maybe move to client
     self endon("weaponTaken");
-    waitrealtime(.75);
+    wait(.75);
     spawnPoint MoveZ(-40,6.25);
-    waitrealtime(4.25);
+    wait(4.25);
     self notify("weaponTaken");
 }
 
@@ -341,7 +378,7 @@ function GetBoxWeaponArray() //helper func to get the zombie weapon array
     return weaponArray;
 }
 
-function PrecacheAllWeaponModels() //maybe works idk I cba to figure out all the model names
+function PrecacheAllWeaponModels() //Spawn all weapon models in 
 {
     
     for(;;)
@@ -367,12 +404,7 @@ function PrecacheAllWeaponModels() //maybe works idk I cba to figure out all the
             {
                 ent = Spawn("script_model", (0,0,20));
                 ent useweaponmodel(weapon);
-                HorseUtil::SafeDelete(ent);
-                //localizedWeaponName = MakeLocalizedString(weapon.displayname); //remove
-                //mysteryBox SetHintString(GRAB_MYSTERY_WEAPON_HINT, localizedWeaponName); //remove
-                //mysteryBox SetCursorHint("HINT_NOICON"); //remove 
-                //IPrintLnBold("Press F for " + localizedWeaponName); //remove
-                
+                HorseUtil::SafeDelete(ent); 
             }
         }
         break;
@@ -393,7 +425,7 @@ function SpawnFireSale() //Remove this
     {
         trig SetHintString("Give gobble gum");
         trig waittill("trigger", player);
-        player bgb::give("zm_bgb_reign_drops");
+        player bgb::give("zm_bgb_unbearable");
     }
 }
 
@@ -430,6 +462,20 @@ function SetUpUniTrigger()
 	zm_unitrigger::unitrigger_force_per_player_triggers(self.unitrigger_stub, true);
 	self.unitrigger_stub.prompt_and_visibility_func = &boxtrigger_update_prompt;
 	
+}
+
+function UnbearableOverride(player)
+{
+    player endon("disconnect");
+    player endon("bgb_update");
+
+    player waittill("zm_bgb_unbearable_used");
+
+    player playsoundtoplayer("zmb_bgb_unbearable", player);
+    player bgb::do_one_shot_use();
+
+    // Your own trigger, not the magic box logic
+    level notify("custom_unbearable_triggered", player);
 }
 /* region dont touch */
 //some wonky shit i pulled from _zm_magicbox.gsc that I dont really understand
