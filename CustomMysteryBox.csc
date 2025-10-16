@@ -27,44 +27,48 @@ function PlayMagicBoxAnim( localClientNum, oldVal, newVal, bNewEnt, bInitialSnap
 
     if (newVal == 1&& isdefined(linkedSpawnPoint))
     {
-        modelSpawnPoint = spawn(localClientNum, linkedSpawnPoint.origin, "script_model");
-        modelSpawnPoint.angles = linkedSpawnPoint.angles;
-        modelSpawnPoint MoveZ(40,3.5);
-             
-        if(isdefined(modelSpawnPoint))
-        {
-            for (i = 0; i < 40; i++) //slot machine animation
-            { 
-                randomIndex = RandomInt(level.includedZombieWeapons.size);
-                rollWeaponName = level.includedZombieWeapons[randomIndex];
-                if(isdefined(rollWeaponName))
-                {
-                    rollWeapon = GetWeapon(rollWeaponName);
-                    modelSpawnPoint useweaponmodel(rollWeapon, rollWeapon.worldmodel);
-                    if( i < 20 )
-                    {
-                        WAIT_SERVER_FRAME; 
-                    }
-                    else if( i < 30 )
-                    {
-                        waitrealtime( 0.1 ); 
-                    }
-                    else if( i < 35 )
-                    {
-                        waitrealtime( 0.2 ); 
-                    }
-                    else if( i < 38 )
-                    {
-                        waitrealtime( 0.3 ); 
-                    }
-                }
-            }
-            waitrealtime( 0.3 );
-            modelSpawnPoint Delete();
-        }
+        thread PlayMagicBoxAnimThreaded(linkedSpawnPoint,localClientNum);
     }
 }
 
+function PlayMagicBoxAnimThreaded(linkedSpawnPoint,localClientNum)
+{
+    modelSpawnPoint = spawn(localClientNum, linkedSpawnPoint.origin, "script_model");
+    modelSpawnPoint.angles = linkedSpawnPoint.angles;
+    modelSpawnPoint MoveZ(40,3.5);
+            
+    if(isdefined(modelSpawnPoint))
+    {
+        for (i = 0; i < 40; i++) //slot machine animation
+        { 
+            randomIndex = RandomInt(level.includedZombieWeapons.size);
+            rollWeaponName = level.includedZombieWeapons[randomIndex];
+            if(isdefined(rollWeaponName))
+            {
+                rollWeapon = GetWeapon(rollWeaponName);
+                modelSpawnPoint useweaponmodel(rollWeapon, rollWeapon.worldmodel);
+                if( i < 20 )
+                {
+                    WAIT_SERVER_FRAME; 
+                }
+                else if( i < 30 )
+                {
+                    waitrealtime( 0.1 ); 
+                }
+                else if( i < 35 )
+                {
+                    waitrealtime( 0.2 ); 
+                }
+                else if( i < 38 )
+                {
+                    waitrealtime( 0.3 ); 
+                }
+            }
+        }
+        waitrealtime( 0.3 );
+        modelSpawnPoint Delete();
+    }
+}
 function GetWeaponsInBoxFromTable( table )
 {
     index = 1; 
