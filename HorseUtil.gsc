@@ -15,7 +15,7 @@ function SpawnFxHelper(relativePos,spawnPoint,fx) //helper func for spawning fx
 {
     if (!isdefined(relativePos))
     {
-        relativePos = (0, 0, 0);
+        //relativePos = (0, 0, 0);
     }
         
     fxEnt = Spawn( "script_model", spawnPoint.origin + relativePos); 

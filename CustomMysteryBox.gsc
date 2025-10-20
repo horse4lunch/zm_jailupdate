@@ -77,9 +77,7 @@ function Awake()
     array::thread_all(level.mysteryBoxArray,&MysteryBox);
     level.relativeOpenFxPos = (0,0,-11);
     level.relativeCloseFxPos = (0,0,-11);
-    thread SpawnFireSale();
-    level.MagicBoxIndex = 0; //unused probably remove
-    FireSaleHandler();
+    thread FireSaleHandler();
     
 }
 
@@ -97,10 +95,21 @@ function MysteryBox()
     self.cost = 950; // default cost
     self.tempBox = false; //tempBox is an active firesale box
     self.boxOpen = false; //If the box is open we cant move it
+    self.beingRemoved = false; //Box is in the process of being removed
+
+
     spawnPointArray = GetSpawnPointArray();
+
     if (self.linkto == "boxSpawnLoc0") //init first box
     {
         self.boxActive = true;
+        thread SpawnChest();
+        self waittill("boxHasEntered");
+    }
+    else //hide all other boxes
+    {
+        self.magicboxModel hide();
+
     }
     for(i=0; i < spawnPointArray.size;i++)
     {
@@ -112,24 +121,32 @@ function MysteryBox()
 
     for(;;)
     {
-        if(!self.boxActive && !self.tempBox)
+        if(!self.boxActive && !self.tempBox) //setting hint strings
         {
             self SetHintString("");
             self SetCursorHint("HINT_NOICON");
             waitrealtime(1);
             continue;
         }
-        if(self.boxActive && !self.tempBox && !self.hasBoxEntered)
+        if(!TreasureChestFiresaleActive()) //setting hint strings
         {
-            thread SpawnChest();
+            self SetHintString(BUY_MYSTERY_WEAPON_HINT); 
+            self SetCursorHint("HINT_NOICON");
+            self.cost = 950;
         }
-        self SetHintString(BUY_MYSTERY_WEAPON_HINT);
-        self SetCursorHint("HINT_NOICON");
+        else                                //setting hint strings
+        {
+            self SetHintString(FIRESALE_BUY_MYSTERY_WEAPON_HINT);
+            self SetCursorHint("HINT_NOICON");
+            self.cost = 10;
+        }
+
         self.modelSpawnPoint = Spawn("script_model", self.linkedSpawnPoint.origin);
         self.modelSpawnPoint.angles = self.linkedSpawnPoint.angles;
+
         self waittill("trigger",player);
 
-        if( player zm_utility::in_revive_trigger() )
+        if( player zm_utility::in_revive_trigger() ) 
 		{
 			wait( 0.1 );
 			continue;
@@ -152,19 +169,11 @@ function MysteryBox()
 			wait( 0.1 );
 			continue;
 		}
-
-		// firesale is in the process of removing this box
-		if ( IS_TRUE( self.being_removed ) )
-		{
-			wait( 0.1 );
-			continue;
-		}
-
          
-        
         if (player zm_score::can_player_purchase(self.cost)) //player bought box
         {
-            player zm_score::minus_to_player_score(self.cost);
+            player zm_score::minus_to_player_score(self.cost); //take points
+           
             self.boxOpen = true;
             self SetHintString("");
             self SetCursorHint("HINT_NOICON");
@@ -173,24 +182,21 @@ function MysteryBox()
             {
                 self.boxHitCount = 0;
             }
-            if(!TreasureChestFiresaleActive())
+            if(!TreasureChestFiresaleActive()) //increase box hitcount
             {
                self.boxHitCount++; 
-               IPrintLnBold("increased bot hit count to " + self.boxHitCount);
             }
             
-
             player playsound("zmb_cha_ching");
             self.modelSpawnPoint MoveZ(40,3.5);
-            HorseUtil::SafeDelete(self.closeFxEnt);
             self.magicboxModel AnimScripted( "openFin", self.magicboxModel.origin , self.magicboxModel.angles, MAGIC_BOX_OPEN);
             zm_utility::play_sound_at_pos( "open_chest", self.origin );
 		    zm_utility::play_sound_at_pos( "music_chest", self.origin );
 
             self.openFxEnt = HorseUtil::SpawnFxHelper(level.relativeOpenFxPos,self.linkedSpawnPoint,OPEN_GLOW_FX); //do fx
             self.newWeapon = thread GetNewRandomBoxWeapon(player); //getting the random weapon to actually give the player, doing it early to avoid lag
-            level clientfield::set( "playMagicBoxAnim", 1);
-            level clientfield::set( "playMagicBoxAnimVar", self.spawnPointIndex);
+            level clientfield::set( "playMagicBoxAnim", 1); //telling the client to play slot machine anim
+            level clientfield::set( "playMagicBoxAnimVar", self.spawnPointIndex); //telling the client which location to play the anim at
             waitrealtime(0.05);
             level clientfield::set( "playMagicBoxAnim", 0);
             
@@ -218,139 +224,161 @@ function MysteryBox()
             
             if(self.boxHitCount >= self.maxBoxHits) //joker
             {
+                //if a fire sale activates select a weapon instead of removing box
+                if(TreasureChestFiresaleActive()) 
+                {
+                    self.boxHitCount -= 2;
+                    ChooseWeapon(player);
+                    continue;
+                }
+
+                self.beingRemoved = true;
+
+                //if player has unbrearable refund points and reset hitcount
                 if(!TreasureChestFiresaleActive() && player bgb::is_enabled( "zm_bgb_unbearable" ))
                 {
                     player TakeBgb();
                     
                     self.boxHitCount = 0;
+                    self.modelSpawnPoint.angles = (0,180,0);
+                    self.modelSpawnPoint SetModel(JOKER_MODEL);
+                    self PlaySound( level.zmb_laugh_alias );
+                    waitrealtime(1);
                     HorseUtil::SafeDelete(self.openFxEnt);
                     HorseUtil::SafeDelete(self.modelSpawnPoint);
                    
                     self.magicboxModel AnimScripted( "closeFin", self.magicboxModel.origin , self.magicboxModel.angles, MAGIC_BOX_CLOSE);
                     
                     self.magicboxModel waittill("closeFin");
-                    self.closeFxEnt = HorseUtil::SpawnFxHelper(level.relativeCloseFxPos,self.linkedSpawnPoint,CLOSE_GLOW_FX); //do fx
                     waitrealtime(1);
+                    player zm_score::add_to_player_score(self.cost);
                     continue;
                 }
 
                 boxArray = GetEntArray("mysteryBox", "targetname"); //setting up a new real box
                 newBox = undefined;
+
                 while (!isdefined(newBox) || newBox == self)
                 {
                     newBox = Array::random(boxArray);
                 }
                 newBox.boxActive = true;
+                
+                //do the joker model and sound
+                self.modelSpawnPoint.angles = (0,180,0);
+                self.modelSpawnPoint SetModel(JOKER_MODEL);
+                self PlaySound( level.zmb_laugh_alias );
+                waitrealtime(1);
+                self.modelSpawnPoint MoveZ(2000,10);
 
-                //self.magicboxModel AnimScripted( "closeFin", self.magicboxModel.origin , self.magicboxModel.angles, MAGIC_BOX_CLOSE);
-                //self.magicboxModel waittill("closeFin");
                 self.boxOpen = false;
-                RemoveChest(player); //remove player from this when we find a better solution
+
+                player zm_score::add_to_player_score(self.cost); //refund player
+                
+                level.chest_moves++;
+
+                RemoveChest();
+                SpawnChest(newBox);
                 continue;
                 
             }
-
-            //modelSpawnPoint MoveZ(-40,0.01);//actually choose weapon
-            self.modelSpawnPoint useweaponmodel(self.newWeapon); 
-
-            if(isdefined(self.newWeapon))
-            {
-                self SetCursorHint( "HINT_WEAPON", self.newWeapon ); 
-            }
-
-            self thread GiveBoxWeapon(player,self.newWeapon);//wait for player to get weapon || timeout
-            self thread WeaponLowerAnimation(self.modelSpawnPoint);
-            self waittill("weaponTaken");
-            
-            HorseUtil::SafeDelete(self.openFxEnt);
-            HorseUtil::SafeDelete(self.modelSpawnPoint);
-            
-            self.magicboxModel AnimScripted( "closeFin", self.magicboxModel.origin , self.magicboxModel.angles, MAGIC_BOX_CLOSE);
-            self.magicboxModel waittill("closeFin");
-            self.closeFxEnt = HorseUtil::SpawnFxHelper(level.relativeCloseFxPos,self.linkedSpawnPoint,CLOSE_GLOW_FX); //do fx
-            self.boxOpen = false;
-            self notify("boxClosed");
-            waitrealtime(1);
-
+            //if we didnt joker choose the weapon to give the player
+            ChooseWeapon(player);
         }
-
     }
-
-
 }
-function SpawnChest()
+
+function ChooseWeapon(player)
 {
-    
-    self.linkedSpawnPoint = GetEnt(self.linkto, "linkname");
-    if(!self.hasBoxEntered || TreasureChestFiresaleActive())
+    self.modelSpawnPoint useweaponmodel(self.newWeapon); 
+
+    if(isdefined(self.newWeapon))
     {
-        self.magicboxModel AnimScripted( "enterFin", self.magicboxModel.origin , self.magicboxModel.angles, MAGIC_BOX_ENTER);
-        self.magicboxModel waittill("enterFin");
-        self SetVisibleToAll();
-
-
-        self.closeFxEnt = HorseUtil::SpawnFxHelper(level.relativeCloseFxPos,self.linkedSpawnPoint,CLOSE_GLOW_FX); //do fx
-        waitrealtime(2); //testing fx shit maybe remove
-        self.hasBoxEntered = true;
+        self SetCursorHint( "HINT_WEAPON", self.newWeapon ); //creates hint string for the weapon without needing to precache
     }
-    self.boxHitCount = 0;
-    self.maxBoxHits = 3; //todo randomize max box hits
-    self SetHintString(BUY_MYSTERY_WEAPON_HINT);
-    self SetCursorHint("HINT_NOICON");
-}
-function RemoveChest(player)
-{
-    if (TreasureChestFiresaleActive() && self.boxActive) //if the box should be leaving but a fire sale activates reduce its hitcount by 1
-    {                                                    //todo find a better solution to this because it doesnt really fix the issue
+
+    self thread GiveBoxWeapon(player,self.newWeapon);//wait for player to get weapon || timeout
+    self thread WeaponLowerAnimation(self.modelSpawnPoint);
+    self waittill("weaponTaken");
     
-        self.boxHitCount--;
-        self.modelSpawnPoint useweaponmodel(self.newWeapon); 
+    HorseUtil::SafeDelete(self.openFxEnt);
+    HorseUtil::SafeDelete(self.modelSpawnPoint);
+    
+    self.magicboxModel AnimScripted( "closeFin", self.magicboxModel.origin , self.magicboxModel.angles, MAGIC_BOX_CLOSE);
+    self.magicboxModel waittill("closeFin");
+    self.boxOpen = false;
+    self notify("boxClosed");
+    waitrealtime(1);
+}
 
-        if(isdefined(self.newWeapon))
-        {
-            self SetCursorHint( "HINT_WEAPON", self.newWeapon ); 
-        }
-
-        self thread GiveBoxWeapon(player,self.newWeapon);//wait for player to get weapon || timeout
-        self thread WeaponLowerAnimation(self.modelSpawnPoint);
-        self waittill("weaponTaken");
-        
-        HorseUtil::SafeDelete(self.openFxEnt);
-        HorseUtil::SafeDelete(self.modelSpawnPoint);
-        
-        self.magicboxModel AnimScripted( "closeFin", self.magicboxModel.origin , self.magicboxModel.angles, MAGIC_BOX_CLOSE);
-        self.magicboxModel waittill("closeFin");
-        self.closeFxEnt = HorseUtil::SpawnFxHelper(level.relativeCloseFxPos,self.linkedSpawnPoint,CLOSE_GLOW_FX); //do fx
-        self.boxOpen = false;
-        self notify("boxClosed");
-        waitrealtime(1);
-        return undefined;
+function SpawnChest(chest = self)
+{
+    //trying to spawn the chest while its in the process of being removed. Wait for remove to finish.
+    //to fix issues with firesales
+    if(chest.beingRemoved)
+    {
+        chest waittill("boxRemoved");  
     }
+
+    chest.linkedSpawnPoint = GetEnt(chest.linkto, "linkname");
+
+    //if a fire sale is active spawn all chests not already in the map
+    if(!chest.hasBoxEntered || TreasureChestFiresaleActive()) 
+    {
+        chest.magicboxModel show();
+        chest.magicboxModel AnimScripted( "enterFin", chest.magicboxModel.origin , chest.magicboxModel.angles, MAGIC_BOX_ENTER);
+        chest.magicboxModel waittill("enterFin");
+        chest SetVisibleToAll();
+        
+
+
+        chest.closeFxEnt = HorseUtil::SpawnFxHelper(level.relativeCloseFxPos,chest.linkedSpawnPoint,CLOSE_GLOW_FX); //do fx
+        waitrealtime(2); //testing fx shit maybe remove
+        chest.hasBoxEntered = true;
+    }
+
+    chest.hasBoxEntered = true;
+    chest.boxHitCount = 0;
+    
+    chest.maxBoxHits = RandomInt(6) + 7; //max box hits maybe todo make this closed to how 3arc does it.
+    chest SetHintString(BUY_MYSTERY_WEAPON_HINT);
+    chest SetCursorHint("HINT_NOICON");
+    chest notify("boxHasEntered");
+}
+function RemoveChest()
+{
+    //if box is currently open wait until its closed to remove it
     if(self.boxOpen)
     {
-        self waittill("boxclosed");
+        self waittill("boxClosed");
     }
+    
     self SetInvisibleToAll();
     self.boxActive = false;
     self.hasBoxEntered = false;
     self.boxHitCount = 0;
-    
-    //todo spawn a joker model and sound
     self.magicboxModel AnimScripted( "leavingFin", self.magicboxModel.origin , self.magicboxModel.angles, MAGIC_BOX_LEAVE);
-    //modelSpawnPoint MoveZ(-40,0.01);
+
     HorseUtil::SafeDelete(self.openFxEnt);
     HorseUtil::SafeDelete(self.closeFxEnt);
-    wait(.25);
+    //wait(.25);
     HorseUtil::SafeDelete(self.modelSpawnPoint);
+
+    self.magicboxModel waittill("leavingFin");
+    
+    self.magicboxModel hide();
+    self.beingRemoved = false;
+    self notify("boxRemoved");
     
 }
-function GetNewRandomBoxWeapon(player)//get a random box weapon the player doesnt already have
+function GetNewRandomBoxWeapon(player)//return a random box weapon the player doesnt already have
 {
     weapons = player GetWeaponsList( true );
     boxWeaponArray = GetBoxWeaponArray();
 
     availableWeaponArray = [];
 
+    //compare weapons in the box with weapons in players inventory. create a new array of weapons minus the ones the player has. 
     for (i = 0; i < boxWeaponArray.size; i++)
     {
         boxWeapon = boxWeaponArray[i];
@@ -371,20 +399,20 @@ function GetNewRandomBoxWeapon(player)//get a random box weapon the player doesn
             availableWeaponArray[availableWeaponArray.size] = boxWeapon;
         }
     }
+    //select the weapon to return
     randomIndex = RandomInt(availableWeaponArray.size);
     boxWeapon = GetWeapon(availableWeaponArray[randomIndex]);
     return boxWeapon;
-    
 }
 
-function GiveBoxWeapon(orginalPlayer,weapon) //give weapon to player
+function GiveBoxWeapon(originalPlayer,weapon) //give weapon to player
 {
     self endon("weaponTaken");
     for(;;)
     {
         self waittill("trigger", player);
         current_weapon = player GetCurrentWeapon();
-        if (player == orginalPlayer&& 
+        if (player == originalPlayer&& 
             zm_utility::is_player_valid( player ) && 
             !IS_DRINKING(player.is_drinking) && 
             !zm_utility::is_placeable_mine( current_weapon ) && 
@@ -396,7 +424,7 @@ function GiveBoxWeapon(orginalPlayer,weapon) //give weapon to player
             if( player bgb::is_enabled( "zm_bgb_crate_power" ) )
             {
                 weapon = zm_weapons::get_upgrade_weapon( weapon );
-                player zm_weapons::weapon_give(weapon, false, false, false, true);
+                //player zm_weapons::weapon_give(weapon, false, false, false, true);
 			    player notify( "zm_bgb_crate_power_used" );
             }
             player zm_weapons::weapon_give(weapon, false, false, false, true);
@@ -408,7 +436,6 @@ function GiveBoxWeapon(orginalPlayer,weapon) //give weapon to player
 
 function WeaponLowerAnimation(spawnPoint) //lower weapon back into box 
 {
-    //todo maybe move to client
     self endon("weaponTaken");
     wait(.75);
     spawnPoint MoveZ(-40,6.25);
@@ -443,13 +470,6 @@ function PrecacheAllWeaponModels() //Spawn all weapon models in
             wait(0.1);
             continue;
         }
-
-        mysteryBox = GetEnt("boxSpawnLoc0","linkname");
-        if (!isdefined(mysteryBox))
-        {
-            wait(0.1);
-            continue;
-        }
         keys = GetArrayKeys( level.zombie_weapons );
         for( i=0; i < keys.size; i++ )
         {
@@ -471,22 +491,7 @@ function TreasureChestFiresaleActive()
 	return IS_TRUE( level.zombie_vars["zombie_powerup_fire_sale_on"] ); 
 }
 
-
-
-function SpawnFireSale() //Remove this
-{
-    trig = GetEnt("firesale","targetname");
-    for(;;)
-    {
-        trig SetHintString("Give gobble gum");
-        trig waittill("trigger", player);
-        player bgb::give("zm_bgb_reign_drops");
-
-        
-    }
-}
-
-function GetSpawnPointArray()
+function GetSpawnPointArray() 
 {
     spawnArray = [];
     spawnArray[0] = "boxSpawnLoc0";
@@ -509,15 +514,19 @@ function FireSaleHandler()
     for(;;)
     {
         level waittill("powerup fire sale");
-        IPrintLnBold("firesale");
         for(i=0;i < level.mysteryBoxArray.size;i++)
         {
-            if(!level.mysteryBoxArray[i].boxActive)
+            if(!level.mysteryBoxArray[i].boxActive || level.mysteryBoxArray[i].beingRemoved)
             {
                 level.mysteryBoxArray[i].tempBox = true;
                 level.mysteryBoxArray[i] thread SpawnChest();
             }
-            
+            else
+            {
+                level.mysteryBoxArray[i] SetHintString(FIRESALE_BUY_MYSTERY_WEAPON_HINT);
+                level.mysteryBoxArray[i] SetCursorHint("HINT_NOICON");
+                level.mysteryBoxArray[i].cost = 10;
+            }  
         }
 
         level waittill("fire_sale_off");
@@ -528,17 +537,17 @@ function FireSaleHandler()
                 level.mysteryBoxArray[i] thread RemoveChest();
                 level.mysteryBoxArray[i].tempBox = false;
             }
-            
-        }
-        
-        
+            else
+            {
+                level.mysteryBoxArray[i] SetHintString(BUY_MYSTERY_WEAPON_HINT);
+                level.mysteryBoxArray[i] SetCursorHint("HINT_NOICON");
+                level.mysteryBoxArray[i].cost = 950;
+            } 
+        }  
     }
 }
 
-
-
-
-function TakeBgb()
+function TakeBgb() //take bgb from players inventory
 {
     if( "none" == self.bgb ) {
         return;
